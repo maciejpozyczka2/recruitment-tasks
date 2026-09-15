@@ -1,0 +1,19 @@
+{
+  "name": "kafka-qa-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Testy E2E przepływu wiadomości Kafka (producent -> orders -> konsument -> orders-processed/orders-dlq)",
+  "scripts": {
+    "test": "jest --runInBand --verbose"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.9",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.5",
+    "typescript": "^5.5.3"
+  }
+}

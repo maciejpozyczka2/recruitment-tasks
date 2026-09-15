@@ -1,0 +1,17 @@
+{
+  "name": "orders-producer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demonstracyjny producent Kafka - wysyła przykładowe zamówienia na topic 'orders'",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/producer.js"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "typescript": "^5.5.3"
+  }
+}
