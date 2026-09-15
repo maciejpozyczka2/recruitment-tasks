@@ -1,20 +1,3 @@
-## Architektura
-
-```
-                 topic: orders                    topic: orders-processed
-producer  ─────────────────────────▶  consumer  ─────────────────────────▶ (wynik)
-(TypeScript, demo)                       │        (TypeScript)
-                                          │  (dane niepoprawne / zły JSON)
-                                          ▼
-                                 topic: orders-dlq
-
-tests (TypeScript, Jest + kafkajs) ----------------------------------------
-  wysyła wiadomości bezpośrednio na 'orders' i weryfikuje efekt
-  na 'orders-processed' / 'orders-dlq'    <-- TU DOPISUJESZ SWÓJ KOD
-```
-
-Cały projekt — aplikacja (`producer`, `consumer`) i testy — jest napisany w **TypeScript** i korzysta z biblioteki `kafkajs`.
-
 ## Wymagania
 
 - Docker + Docker Compose v2 (`docker compose`, nie `docker-compose`).

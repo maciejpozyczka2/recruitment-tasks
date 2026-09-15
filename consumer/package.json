@@ -1,0 +1,17 @@
+{
+  "name": "orders-consumer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Konsument Kafka - waliduje i przetwarza zamówienia z topicu 'orders'",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/consumer.js"
+  },
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "typescript": "^5.5.3"
+  }
+}
