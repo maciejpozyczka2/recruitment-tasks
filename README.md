@@ -1,4 +1,4 @@
-## Wymagania
+﻿## Wymagania
 
 - Docker + Docker Compose v2 (`docker compose`, nie `docker-compose`).
 - Wolny port `9092` lokalnie (Kafka).
@@ -61,10 +61,20 @@ docker compose down -v
 ## Twoje notatki (uzupełnij przed oddaniem zadania)
 
 ### Uwagi do uruchomienia
-_(jeśli coś zmieniłeś/aś względem domyślnej konfiguracji, opisz to tutaj)_
+
+- Nie wprowadzono żadnych zmian w konfiguracji Docker ani w kodzie aplikacji.
+- Wymagana jest aktywna Docker Desktop z uruchomionym Docker Engine.
+- W przypadku problemów z PowerShell (blad `npm.ps1 cannot be loaded`), uruchamiać komendy z `-ExecutionPolicy Bypass`.
 
 ### Podejście do testowania
-_(2–4 zdania: jak podszedłeś/aś do problemu, jakie decyzje podjąłeś/aś)_
 
-### Znane ograniczenia / co zrobiłbym/zrobiłabym inaczej mając więcej czasu
-_(krótka lista)_
+Kazdy test jest w pelni izolowany - helper `waitForMessage` / `collectMessages` tworzy nowego konsumenta z unikalnym groupId i czyta od poczatku (fromBeginning: true), wiec testy mozna uruchomic w dowolnej kolejnosci. Zamiast sztywnych `setTimeout`/`sleep` uzywam polling z timeoutem (20s domyslnie), co eliminuje czasowe flaky. Asercje sprawdzaja nie tylko obecnosc wiadomosci, ale tez poprawnosc pól (typy, wartosci, status).
+
+### Znane ograniczenia / co zrobilbym/zrobilabym inaczej majac wiecej czasu
+
+- Brak testu negatywnego (valid order nie powinien tracic do DLQ) poza testem 6 - rozszerzenie o sprawdzenie braków na innych topicach.
+- Test 5 (wiele zamowien) nie weryfikuje kolejnosci - w systemie Kafka kolejnosc w partitionie jest gwarancyjna, ale test tego nie sprawdza.
+- Brak testów regresyjnych z losowymi timeoutami - przy slabej wydajnoci Kafki timeout 20s moze byc za krótki w obciazonym srodowisku.
+- Wartо rozważyć testowanie z różnymi rozmiarami partii (1, 10, 100) dla lepszego pokrycia.
+- Test niedzialania consumera (np. zatrzymanie kontenera Docker) - sprawdzenie, jak system radzi sobie z brakiem przetwarzania i backlogiem. Brak tego testu jest celowy, poniewaz wymaga modyfikacji kodu aplikacyjnego (symulacji przerwy w przetwarzaniu) i nie jest wymagany w podstawie zadania, ale warto go rozważyć w przyszłości jako test resilience systemu.
+- Testy graniczne (null z waitForMessage, timeout w collectMessages) - dodane w celu sprawdzenia behavioru helperów w warunkach pressure (brak wiadomości, timeout).
