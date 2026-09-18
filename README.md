@@ -72,6 +72,8 @@ Kazdy test jest w pelni izolowany - helper `waitForMessage` / `collectMessages` 
 
 ### Znane ograniczenia / co zrobilbym/zrobilabym inaczej majac wiecej czasu
 
+- Naprawiono błąd w `waitForMessage`/`collectMessages` — `consumer.run()` był wywoływany bez `await`, co powodowało race condition i timeouty testów. Teraz `consumer.run()` jest awaited, więc testy czekają na pełne uruchomienie konsumenta przed kontynuacją.
+
 - Brak testu negatywnego (valid order nie powinien tracic do DLQ) poza testem 6 - rozszerzenie o sprawdzenie braków na innych topicach.
 - Test 5 (wiele zamowien) nie weryfikuje kolejnosci - w systemie Kafka kolejnosc w partitionie jest gwarancyjna, ale test tego nie sprawdza.
 - Brak testów regresyjnych z losowymi timeoutami - przy slabej wydajnoci Kafki timeout 20s moze byc za krótki w obciazonym srodowisku.

@@ -137,7 +137,7 @@ export async function waitForMessage(
   await consumer.connect();
   await consumer.subscribe({ topic, fromBeginning: true });
 
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     let settled = false;
 
     const finish = async (result: unknown) => {
@@ -155,8 +155,8 @@ export async function waitForMessage(
       void finish(null);
     }, timeoutSeconds * 1000);
 
-    consumer
-      .run({
+    try {
+      await consumer.run({
         eachMessage: async ({ message }: EachMessagePayload) => {
           if (settled) return;
           const parsed = tryParse(message.value);
@@ -164,11 +164,11 @@ export async function waitForMessage(
             await finish(parsed);
           }
         },
-      })
-      .catch((err) => {
-        clearTimeout(timer);
-        reject(err);
       });
+    } catch (err) {
+      clearTimeout(timer);
+      reject(err);
+    }
   });
 }
 
@@ -187,7 +187,7 @@ export async function collectMessages(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const found: any[] = [];
 
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     let settled = false;
 
     const finish = async () => {
@@ -205,8 +205,8 @@ export async function collectMessages(
       void finish();
     }, timeoutSeconds * 1000);
 
-    consumer
-      .run({
+    try {
+      await consumer.run({
         eachMessage: async ({ message }: EachMessagePayload) => {
           if (settled) return;
           const parsed = tryParse(message.value);
@@ -217,10 +217,10 @@ export async function collectMessages(
             }
           }
         },
-      })
-      .catch((err) => {
-        clearTimeout(timer);
-        reject(err);
       });
+    } catch (err) {
+      clearTimeout(timer);
+      reject(err);
+    }
   });
 }
