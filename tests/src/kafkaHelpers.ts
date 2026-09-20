@@ -135,7 +135,7 @@ export async function waitForMessage(
 ): Promise<any | null> {
   const consumer = newConsumer();
   await consumer.connect();
-  await consumer.subscribe({ topic });
+  await consumer.subscribe({ topic, fromBeginning: true });
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -190,7 +190,7 @@ export async function collectMessages(
 ): Promise<any[]> {
   const consumer = newConsumer();
   await consumer.connect();
-  await consumer.subscribe({ topic });
+  await consumer.subscribe({ topic, fromBeginning: true });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const found: any[] = [];

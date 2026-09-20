@@ -43,13 +43,15 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
       status: "NEW",
     });
 
-    await sendOrder(producer, expectedOrder);
-
-    const receivedOrder = await waitForMessage(
+    const messagePromise = waitForMessage(
       ORDERS_PROCESSED_TOPIC,
       (value: Record<string, unknown>) =>
         value?.orderId === expectedOrder.orderId
     );
+
+    await sendOrder(producer, expectedOrder);
+
+    const receivedOrder = await messagePromise;
 
     expect(receivedOrder).not.toBeNull();
     expect(receivedOrder).toHaveProperty("orderId", expectedOrder.orderId);
@@ -66,9 +68,7 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
   it("Niepoprawny JSON trafia na orders-dlq - w value pole error zawiera informacje o niepoprawnym JSON", async () => {
     const rawValue = "{ broken json";
 
-    await sendRaw(producer, rawValue, "raw-key");
-
-    const received = await waitForMessage(
+    const messagePromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
       (value: Record<string, unknown>) => {
         return (
@@ -78,6 +78,10 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
         );
       }
     );
+
+    await sendRaw(producer, rawValue, "raw-key");
+
+    const received = await messagePromise;
 
     expect(received).not.toBeNull();
     expect(received).toHaveProperty("error");
@@ -92,9 +96,7 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
       customer: "Test Testowski",
     };
 
-    await sendOrder(producer, incompleteOrder);
-
-    const received = await waitForMessage(
+    const messagePromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
       (value: Record<string, unknown>) => {
         return (
@@ -104,6 +106,10 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
         );
       }
     );
+
+    await sendOrder(producer, incompleteOrder);
+
+    const received = await messagePromise;
 
     expect(received).not.toBeNull();
     expect(received).toHaveProperty("error");
@@ -118,9 +124,7 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
       orderId: `bad-type-${Date.now()}`,
     });
 
-    await sendOrder(producer, badTypeOrder);
-
-    const received = await waitForMessage(
+    const messagePromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
       (value: Record<string, unknown>) => {
         return (
@@ -131,6 +135,10 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
       }
     );
 
+    await sendOrder(producer, badTypeOrder);
+
+    const received = await messagePromise;
+
     expect(received).not.toBeNull();
     expect(received).toHaveProperty("error");
     expect(received.error).toContain("musi byc liczba");
@@ -138,22 +146,27 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
 
   it("Wiele poprawnych zamowien - wszystkie trafiaja na orders-processed", async () => {
     const orderCount = 5;
+    const testId = `multi-order-${Date.now()}`;
     const expectedOrderIds: string[] = [];
+
+    const collectPromise = collectMessages(
+      ORDERS_PROCESSED_TOPIC,
+      (value: Record<string, unknown>) => {
+        const orderId = value?.orderId as string;
+        return orderId?.startsWith(testId) && value?.status === "PROCESSED";
+      },
+      orderCount
+    );
 
     for (let i = 0; i < orderCount; i++) {
       const order = makeTestOrder({
-        orderId: `multi-order-${Date.now()}-${i}`,
+        orderId: `${testId}-${i}`,
       });
       expectedOrderIds.push(order.orderId);
       await sendOrder(producer, order);
     }
 
-    const receivedOrders = await collectMessages(
-      ORDERS_PROCESSED_TOPIC,
-      (value: Record<string, unknown>) =>
-        value?.status === "PROCESSED",
-      orderCount
-    );
+    const receivedOrders = await collectPromise;
 
     expect(receivedOrders).toHaveLength(orderCount);
 
@@ -179,13 +192,15 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
       orderId: `no-dlq-${Date.now()}`,
     });
 
-    await sendOrder(producer, validOrder);
-
-    const dlqMessage = await waitForMessage(
+    const dlqPromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
       () => false,
       2
     );
+
+    await sendOrder(producer, validOrder);
+
+    const dlqMessage = await dlqPromise;
 
     expect(dlqMessage).toBeNull();
   });
