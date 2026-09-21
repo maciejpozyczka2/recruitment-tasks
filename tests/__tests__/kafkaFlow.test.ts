@@ -29,6 +29,21 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
 
   beforeAll(async () => {
     producer = await getProducer();
+
+    // Warmup: upewnij się że consumer aplikacji jest gotowy
+    // Wyślij dummy order i czekaj aż się pojawi na orders-processed
+    const warmupOrder = makeTestOrder({
+      orderId: `warmup-${Date.now()}`,
+    });
+
+    const warmupPromise = waitForMessage(
+      ORDERS_PROCESSED_TOPIC,
+      (value: Record<string, unknown>) => value?.orderId === warmupOrder.orderId,
+      10 // 10s timeout na warmup
+    );
+
+    await sendOrder(producer, warmupOrder);
+    await warmupPromise;
   });
 
   afterAll(async () => {
