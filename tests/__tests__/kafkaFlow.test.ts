@@ -249,4 +249,143 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
 
     expect(receivedOrders).toHaveLength(0);
   });
+
+  it("Pusta wiadomosc (tombstone) jest ignorowana bez logu i bez DLQ", async () => {
+    const result = await waitForMessage(
+      ORDERS_PROCESSED_TOPIC,
+      () => false,
+      5
+    );
+
+    expect(result).toBeNull();
+
+    const dlqResult = await waitForMessage(
+      ORDERS_DLQ_TOPIC,
+      () => false,
+      5
+    );
+
+    expect(dlqResult).toBeNull();
+  });
+
+  it("Poprawny JSON o zlym ksztalcie (null) blokuje partycje - brak DLQ i brak orders-processed", async () => {
+    await sendRaw(producer, "null", "test-null-key");
+
+    const processedResult = await waitForMessage(
+      ORDERS_PROCESSED_TOPIC,
+      () => false,
+      5
+    );
+
+    expect(processedResult).toBeNull();
+
+    const dlqResult = await waitForMessage(
+      ORDERS_DLQ_TOPIC,
+      () => false,
+      5
+    );
+
+    expect(dlqResult).toBeNull();
+  });
+
+  it("Poprawny JSON o zlym ksztalcie (string) trafia na orders-dlq z informacja o brakujacych polach", async () => {
+    const corrId = `json-string-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const rawPayload = `"${corrId}"`;
+
+    const dlqMatcher = (id: string) => (v: any) =>
+      v?.originalMessage?.orderId === id ||
+      (typeof v?.raw === "string" && v.raw.includes(id));
+
+    const messagePromise = waitForMessage(
+      ORDERS_DLQ_TOPIC,
+      dlqMatcher(corrId),
+      10
+    );
+
+    await sendRaw(producer, rawPayload, "test-string-key");
+
+    const received = await messagePromise;
+
+    expect(received).not.toBeNull();
+    expect(received).toHaveProperty("error");
+    expect(received.error).toContain("Brakujące pola");
+    expect(received).toHaveProperty("originalMessage");
+    expect(received.originalMessage).toHaveProperty("orderId", corrId);
+  });
+
+  it("orderId niebedacy stringiem trafia na orders-dlq z informacja o zlym typie", async () => {
+    const orderId = `bad-orderId-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const badOrder = makeTestOrder({
+      orderId: 123 as unknown as string,
+    });
+
+    const dlqMatcher = (id: string) => (v: any) =>
+      v?.originalMessage?.orderId === id;
+
+    const messagePromise = waitForMessage(
+      ORDERS_DLQ_TOPIC,
+      dlqMatcher(orderId),
+      10
+    );
+
+    await sendOrder(producer, badOrder);
+
+    const received = await messagePromise;
+
+    expect(received).not.toBeNull();
+    expect(received).toHaveProperty("error");
+    expect(received.error).toContain("musi byc stringiem");
+    expect(received).toHaveProperty("originalMessage");
+    expect(received.originalMessage).toHaveProperty("orderId", orderId);
+  });
+
+  it("Wiele bledow naraz sklejone jest w jednym message error z DLQ", async () => {
+    const orderId = `multi-error-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const badOrder = makeTestOrder({
+      amount: "not-a-number" as unknown as number,
+      status: "",
+      orderId,
+    });
+
+    const dlqMatcher = (id: string) => (v: any) =>
+      v?.originalMessage?.orderId === id;
+
+    const messagePromise = waitForMessage(
+      ORDERS_DLQ_TOPIC,
+      dlqMatcher(orderId),
+      10
+    );
+
+    await sendOrder(producer, badOrder);
+
+    const received = await messagePromise;
+
+    expect(received).not.toBeNull();
+    expect(received).toHaveProperty("error");
+    expect(received.error).toContain("musi byc liczbą");
+    expect(received.error).toContain("musi byc stringiem");
+  });
+
+  it("Klucz wiadomosci jest propagowany na orders-processed", async () => {
+    const orderId = `key-test-${Date.now()}`;
+    const order = makeTestOrder({
+      orderId,
+      customer: "Key Test Customer",
+      amount: 42.0,
+      status: "NEW",
+    });
+
+    await sendOrder(producer, order);
+
+    const received = await waitForMessage(
+      ORDERS_PROCESSED_TOPIC,
+      (v: Record<string, unknown>) =>
+        v?.orderId === orderId && v?.status === "PROCESSED"
+    );
+
+    expect(received).not.toBeNull();
+    expect(received).toHaveProperty("orderId", orderId);
+    expect(received).toHaveProperty("status", "PROCESSED");
+    expect(received.key).toBe(order.orderId);
+  });
 });
