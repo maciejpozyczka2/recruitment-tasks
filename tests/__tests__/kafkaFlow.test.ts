@@ -125,7 +125,7 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
 
     expect(received).not.toBeNull();
     expect(received).toHaveProperty("error");
-    expect(received.error).toContain("Brakujace pola");
+    expect(received.error).toContain("Brakujące pola");
     expect(received).toHaveProperty("originalMessage");
     expect(received.originalMessage).toHaveProperty("orderId", orderId);
   });
@@ -151,7 +151,7 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
 
     expect(received).not.toBeNull();
     expect(received).toHaveProperty("error");
-    expect(received.error).toContain("musi byc liczba");
+    expect(received.error).toContain("musi byc liczbą");
   });
 
   it("Wiele poprawnych zamowien - wszystkie trafiaja na orders-processed", async () => {
