@@ -81,17 +81,16 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
   });
 
   it("Niepoprawny JSON trafia na orders-dlq - w value pole error zawiera informacje o niepoprawnym JSON", async () => {
-    const rawValue = "{ broken json";
+    const corrId = `broken-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const rawValue = `{ broken json ${corrId}`;
+
+    const dlqMatcher = (id: string) => (v: any) =>
+      v?.originalMessage?.orderId === id ||
+      (typeof v?.raw === "string" && v.raw.includes(id));
 
     const messagePromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
-      (value: Record<string, unknown>) => {
-        return (
-          !!value?.error &&
-          typeof value.error === "string" &&
-          value.error.includes("Niepoprawny JSON")
-        );
-      }
+      dlqMatcher(corrId)
     );
 
     await sendRaw(producer, rawValue, "raw-key");
@@ -106,20 +105,18 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
   });
 
   it("Brakujace wymagane pola trafiaja na orders-dlq - w value pole error informuje o brakujacych polach", async () => {
+    const orderId = `missing-fields-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const incompleteOrder = {
-      orderId: "missing-fields",
+      orderId,
       customer: "Test Testowski",
     };
 
+    const dlqMatcher = (id: string) => (v: any) =>
+      v?.originalMessage?.orderId === id;
+
     const messagePromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
-      (value: Record<string, unknown>) => {
-        return (
-          !!value?.error &&
-          typeof value.error === "string" &&
-          value.error.includes("Brakujace pola")
-        );
-      }
+      dlqMatcher(orderId)
     );
 
     await sendOrder(producer, incompleteOrder);
@@ -130,24 +127,22 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
     expect(received).toHaveProperty("error");
     expect(received.error).toContain("Brakujace pola");
     expect(received).toHaveProperty("originalMessage");
-    expect(received.originalMessage).toHaveProperty("orderId", "missing-fields");
+    expect(received.originalMessage).toHaveProperty("orderId", orderId);
   });
 
   it("Zly typ pola amount (string zamiast liczby) trafia na orders-dlq - w value pole error informuje o zlym typie", async () => {
+    const orderId = `bad-type-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const badTypeOrder = makeTestOrder({
       amount: "not-a-number" as unknown as number,
-      orderId: `bad-type-${Date.now()}`,
+      orderId,
     });
+
+    const dlqMatcher = (id: string) => (v: any) =>
+      v?.originalMessage?.orderId === id;
 
     const messagePromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
-      (value: Record<string, unknown>) => {
-        return (
-          !!value?.error &&
-          typeof value.error === "string" &&
-          value.error.includes("musi byc liczba")
-        );
-      }
+      dlqMatcher(orderId)
     );
 
     await sendOrder(producer, badTypeOrder);
@@ -207,13 +202,27 @@ describe("Przepływ przetwarzania zamówień przez Kafkę", () => {
       orderId: `no-dlq-${Date.now()}`,
     });
 
+    const dlqMatcher = (id: string) => (v: any) =>
+      v?.originalMessage?.orderId === id;
+
     const dlqPromise = waitForMessage(
       ORDERS_DLQ_TOPIC,
-      () => false,
-      2
+      dlqMatcher(validOrder.orderId),
+      8
     );
 
     await sendOrder(producer, validOrder);
+
+    const processedMessage = await waitForMessage(
+      ORDERS_PROCESSED_TOPIC,
+      (v: Record<string, unknown>) =>
+        v?.orderId === validOrder.orderId && v?.status === "PROCESSED",
+      15
+    );
+
+    expect(processedMessage).not.toBeNull();
+    expect(processedMessage).toHaveProperty("orderId", validOrder.orderId);
+    expect(processedMessage).toHaveProperty("status", "PROCESSED");
 
     const dlqMessage = await dlqPromise;
 
