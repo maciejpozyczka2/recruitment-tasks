@@ -137,47 +137,32 @@ export async function waitForMessage(
   await consumer.connect();
   await consumer.subscribe({ topic, fromBeginning: true });
 
-  return new Promise((resolve, reject) => {
-    let settled = false;
+  let result: unknown = null;
+  let settled = false;
+  let runnerError: Error | null = null;
 
-    const finish = async (result: unknown) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try {
-        await consumer.disconnect();
-      } finally {
-        resolve(result);
-      }
-    };
+  try {
+    consumer.run({
+      eachMessage: async ({ message }: EachMessagePayload) => {
+        if (settled) return;
+        const parsed = tryParse(message.value);
+        if (parsed !== null && matchFn(parsed)) {
+          settled = true;
+          result = parsed;
+        }
+      },
+    }).catch((err) => {
+      runnerError = err;
+    });
 
-    const timer = setTimeout(() => {
-      void finish(null);
-    }, timeoutSeconds * 1000);
+    await new Promise<void>((resolve) => setTimeout(resolve, timeoutSeconds * 1000));
 
-    console.log(`[DEBUG] Starting consumer.run() for topic: ${topic}`);
-    consumer
-      .run({
-        eachMessage: async ({ topic, partition, message }: EachMessagePayload) => {
-          console.log(`[DEBUG] eachMessage called. Topic: ${topic}, Partition: ${partition}, Key: ${message.key?.toString()}, Value: ${message.value?.toString()}`);
-          if (settled) return;
-          const parsed = tryParse(message.value);
-          console.log(`[DEBUG] Parsed value: ${JSON.stringify(parsed)}, MatchFn result: ${matchFn(parsed)}`);
-          if (parsed !== null && matchFn(parsed)) {
-            console.log(`[DEBUG] Match found! Resolving...`);
-            await finish(parsed);
-          }
-        },
-      })
-      .then(() => {
-        console.log(`[DEBUG] consumer.run() completed successfully`);
-      })
-      .catch((err) => {
-        console.log(`[DEBUG] consumer.run() rejected: ${err.message}`);
-        clearTimeout(timer);
-        reject(err);
-      });
-  });
+    if (runnerError) throw runnerError;
+  } finally {
+    await consumer.disconnect();
+  }
+
+  return settled ? result : null;
 }
 
 /** Zbiera do expectedCount wiadomości spełniających matchFn w limicie czasu. */
@@ -194,50 +179,42 @@ export async function collectMessages(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const found: any[] = [];
+  let settled = false;
+  let runnerError: Error | null = null;
 
-  return new Promise((resolve, reject) => {
-    let settled = false;
-
-    const finish = async () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try {
-        await consumer.disconnect();
-      } finally {
-        resolve(found);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      void finish();
-    }, timeoutSeconds * 1000);
-
-    console.log(`[DEBUG] Starting consumer.run() for topic: ${topic}`);
-    consumer
-      .run({
-        eachMessage: async ({ topic, partition, message }: EachMessagePayload) => {
-          console.log(`[DEBUG] eachMessage called. Topic: ${topic}, Partition: ${partition}, Key: ${message.key?.toString()}, Value: ${message.value?.toString()}`);
-          if (settled) return;
-          const parsed = tryParse(message.value);
-          console.log(`[DEBUG] Parsed value: ${JSON.stringify(parsed)}, MatchFn result: ${matchFn(parsed)}`);
-          if (parsed !== null && matchFn(parsed)) {
-            console.log(`[DEBUG] Match found! Found count: ${found.length + 1}/${expectedCount}`);
-            found.push(parsed);
-            if (found.length >= expectedCount) {
-              console.log(`[DEBUG] All messages collected! Resolving...`);
-              await finish();
-            }
+  try {
+    consumer.run({
+      eachMessage: async ({ message }: EachMessagePayload) => {
+        if (settled) return;
+        const parsed = tryParse(message.value);
+        if (parsed !== null && matchFn(parsed)) {
+          found.push(parsed);
+          if (found.length >= expectedCount) {
+            settled = true;
           }
-        },
-      })
-      .then(() => {
-        console.log(`[DEBUG] consumer.run() completed successfully`);
-      })
-      .catch((err) => {
-        console.log(`[DEBUG] consumer.run() rejected: ${err.message}`);
-        clearTimeout(timer);
-        reject(err);
-      });
-  });
+        }
+      },
+    }).catch((err) => {
+      runnerError = err;
+    });
+
+    await new Promise<void>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (settled) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve();
+      }, timeoutSeconds * 1000);
+    });
+
+    if (runnerError) throw runnerError;
+  } finally {
+    await consumer.disconnect();
+  }
+
+  return found;
 }
